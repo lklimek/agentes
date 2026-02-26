@@ -6,37 +6,50 @@
   },
   "metadata": {
     "description": "Agentes in Rebus — AI agent plugins for blockchain developers. Skills, agents, and tools for the Dash Platform ecosystem and beyond.",
-    "version": "0.0.0",
+    "version": "0.0.1",
     "homepage": "https://github.com/lklimek/agentes"
   },
   "plugins": [
     {
       "name": "claudash",
-      "description": "Dash Platform development skills with hybrid lexicon-based documentation lookup. Covers data contracts, Rust SDK, JS SDK, and gRPC APIs.",
+      "description": "Skills for Dash Platform developers — data contracts, Rust SDK, JS SDK, and API lexicon",
       "source": {
         "source": "github",
         "repo": "lklimek/claudash"
       },
-      "version": "0.0.0",
+      "version": "0.3.0",
       "author": {
         "name": "lklimek"
       },
       "category": "blockchain",
-      "tags": ["dash", "blockchain", "rust", "javascript", "grpc", "platform"]
+      "tags": [
+        "dash",
+        "blockchain",
+        "rust",
+        "javascript",
+        "grpc",
+        "platform"
+      ]
     },
     {
       "name": "claudius",
-      "description": "Opinionated dev lifecycle toolkit with agents and skills for productive AI-assisted development workflows.",
+      "description": "Collection of specialized development agents and skills for Claude Code",
       "source": {
         "source": "github",
         "repo": "lklimek/claudius"
       },
-      "version": "1.0.0",
+      "version": "0.7.1",
       "author": {
-        "name": "lklimek"
+        "name": "lklimek",
+        "url": "https://github.com/lklimek"
       },
       "category": "productivity",
-      "tags": ["dev-lifecycle", "agents", "workflow", "productivity"]
+      "tags": [
+        "dev-lifecycle",
+        "agents",
+        "workflow",
+        "productivity"
+      ]
     }
   ]
 }
