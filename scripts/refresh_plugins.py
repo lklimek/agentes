@@ -34,6 +34,11 @@ BUNDLED_SCHEMA_PATH = Path(__file__).parent / "marketplace.schema.json"
 # Fields that the marketplace controls — never overwritten from source.
 PROTECTED_FIELDS = frozenset({"name", "source"})
 
+# Marketplace-specific fields: exist only in marketplace entries, never in
+# plugin.json manifests.  Preserved from the entry when source doesn't
+# provide them; source wins if it does (unlikely but harmless).
+MARKETPLACE_ONLY_FIELDS = frozenset({"category", "tags", "strict", "settings"})
+
 
 # ── Schema loading ───────────────────────────────────────────────────────
 
@@ -72,10 +77,23 @@ def validate_marketplace(marketplace: dict) -> list[str]:
     """Validate *marketplace* against the JSON Schema.
 
     Returns a list of human-readable error messages (empty == valid).
+    Includes checks that JSON Schema cannot express (duplicate names).
     """
     schema = load_schema(marketplace)
     validator = jsonschema.Draft202012Validator(schema)
-    return [_format_error(e) for e in validator.iter_errors(marketplace)]
+    errors = [_format_error(e) for e in validator.iter_errors(marketplace)]
+
+    # Duplicate plugin names (not expressible in JSON Schema)
+    seen: set[str] = set()
+    for i, plugin in enumerate(marketplace.get("plugins", [])):
+        name = plugin.get("name")
+        if name is None:
+            continue
+        if name in seen:
+            errors.append(f'plugins.{i}.name: Duplicate plugin name "{name}"')
+        seen.add(name)
+
+    return errors
 
 
 def _format_error(error: jsonschema.ValidationError) -> str:
@@ -123,21 +141,24 @@ def _filter_author(author: object) -> dict | None:
 def merge_plugin(entry: dict, source: dict) -> dict:
     """Merge source fields into a marketplace plugin entry.
 
-    * Protected fields (``name``, ``source``) are kept from the marketplace
-      entry.
-    * All other documented fields are taken from *source* if present.
-    * Fields present in the entry but absent from source (except protected)
-      are dropped.
+    * Protected fields (``name``, ``source``) are always kept from the
+      marketplace entry.
+    * Marketplace-only fields (``category``, ``tags``, ``strict``,
+      ``settings``) are preserved from the entry when absent from source.
+    * All other documented fields are taken from *source* if present;
+      fields absent from source are dropped.
     """
     documented = _documented_plugin_fields()
+    keep_from_entry = PROTECTED_FIELDS | MARKETPLACE_ONLY_FIELDS
     merged: dict = {}
 
-    # Keep protected fields from marketplace entry
-    for field in PROTECTED_FIELDS:
+    # Keep protected + marketplace-only fields from entry
+    for field in keep_from_entry:
         if field in entry:
             merged[field] = copy.deepcopy(entry[field])
 
-    # Copy documented fields from source
+    # Copy documented fields from source (overwrites marketplace-only if
+    # source happens to provide them)
     for field in documented - PROTECTED_FIELDS:
         if field in source:
             merged[field] = copy.deepcopy(source[field])
