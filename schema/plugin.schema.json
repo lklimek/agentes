@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://anthropic.com/claude-code/plugin.schema.json",
+  "title": "Claude Code Plugin Manifest",
+  "description": "Schema for .claude-plugin/plugin.json files. See $comment for provenance.",
+  "$comment": "Reverse-engineered from the Zod schema in @anthropic-ai/claude-code cli.js (v2.1.61). The plugin manifest schema is composed as: coreFields.extend(hooks.partial(), commands.partial(), agents.partial(), skills.partial(), outputStyles.partial(), mcpServers.partial(), lspServers.partial(), settings.partial()).strict() — 16 fields total, only name required.",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^ ]+$",
+      "description": "Unique identifier for the plugin, used for namespacing (prefer kebab-case)"
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version (e.g., 1.2.3)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief, user-facing explanation of what the plugin provides"
+    },
+    "author": {
+      "$ref": "#/$defs/author"
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri",
+      "description": "Plugin homepage or documentation URL"
+    },
+    "repository": {
+      "type": "string",
+      "description": "Source code repository URL"
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX license identifier (e.g., MIT, Apache-2.0)"
+    },
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Tags for plugin discovery and categorization"
+    },
+    "hooks": {
+      "description": "Hook definitions or path to hooks JSON file",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array" },
+        { "type": "object" }
+      ]
+    },
+    "commands": {
+      "description": "Command definitions — relative path(s) or object map of command names to metadata",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array" },
+        { "type": "object" }
+      ]
+    },
+    "agents": {
+      "description": "Agent definitions — relative path(s) to agent markdown files",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
+    "skills": {
+      "description": "Skill definitions — relative path(s) to skill directories",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
+    "outputStyles": {
+      "description": "Output style definitions — relative path(s) to output style files",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
+    "mcpServers": {
+      "description": "MCP server configurations — path(s), .mcpb/.dxt files, or inline definitions",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array" },
+        { "type": "object" }
+      ]
+    },
+    "lspServers": {
+      "description": "LSP server configurations — path(s) or inline definitions",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array" },
+        { "type": "object" }
+      ]
+    },
+    "settings": {
+      "type": "object",
+      "description": "Settings to merge when plugin is enabled. Only allowlisted keys are kept (currently: agent)"
+    }
+  },
+  "$defs": {
+    "author": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Display name of the author or organization"
+        },
+        "email": {
+          "type": "string",
+          "description": "Contact email"
+        },
+        "url": {
+          "type": "string",
+          "description": "Website, GitHub profile, or organization URL"
+        }
+      }
+    }
+  }
+}

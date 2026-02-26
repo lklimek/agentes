@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "title": "Claude Code Plugin Marketplace",
+  "description": "Schema for Claude Code plugin marketplace configuration files. See $comment for provenance.",
+  "$comment": "Anthropic references $schema 'https://anthropic.com/claude-code/marketplace.schema.json' in their marketplace files but that URL returns 404 — no standalone schema is published. The actual validation lives as Zod schemas compiled into cli.js of the @anthropic-ai/claude-code npm package (v2.1.61). This file was reverse-engineered from those Zod definitions. The marketplace plugin entry schema is pluginManifestSchema.partial().extend({name, source, category, tags, strict}).strict() — all 16 plugin.json fields are valid in marketplace entries, plus 4 marketplace-only fields. Sources: (1) Zod schemas extracted from node_modules/@anthropic-ai/claude-code/cli.js, (2) official docs at https://code.claude.com/docs/en/plugin-marketplaces and https://code.claude.com/docs/en/plugins-reference, (3) live marketplace.json files from anthropics/claude-code, anthropics/claude-plugins-official, anthropics/skills, and anthropics/knowledge-work-plugins on GitHub.",
+  "type": "object",
+  "required": ["name", "owner", "plugins"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^ ]+$",
+      "description": "Marketplace identifier (no spaces)"
+    },
+    "owner": {
+      "$ref": "#/$defs/author",
+      "description": "Marketplace maintainer or curator information"
+    },
+    "plugins": {
+      "type": "array",
+      "description": "Collection of available plugins in this marketplace",
+      "items": { "$ref": "#/$defs/pluginEntry" }
+    },
+    "forceRemoveDeletedPlugins": {
+      "type": "boolean",
+      "description": "When true, plugins removed from this marketplace will be automatically uninstalled"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Brief marketplace description"
+        },
+        "version": {
+          "type": "string",
+          "description": "Marketplace version"
+        },
+        "pluginRoot": {
+          "type": "string",
+          "description": "Base directory prepended to relative plugin source paths"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "author": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Display name of the author or organization"
+        },
+        "email": {
+          "type": "string",
+          "description": "Contact email"
+        },
+        "url": {
+          "type": "string",
+          "description": "Website, GitHub profile, or organization URL"
+        }
+      }
+    },
+    "pluginSource": {
+      "description": "Where to fetch the plugin from",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^\\./",
+          "description": "Relative path within the marketplace repo (must start with ./)"
+        },
+        { "$ref": "#/$defs/githubSource" },
+        { "$ref": "#/$defs/urlSource" },
+        { "$ref": "#/$defs/npmSource" },
+        { "$ref": "#/$defs/pipSource" }
+      ]
+    },
+    "githubSource": {
+      "type": "object",
+      "required": ["source", "repo"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "const": "github" },
+        "repo": {
+          "type": "string",
+          "description": "GitHub repository in owner/repo format"
+        },
+        "ref": {
+          "type": "string",
+          "description": "Git branch or tag"
+        },
+        "sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$",
+          "description": "Full 40-character git commit SHA"
+        }
+      }
+    },
+    "urlSource": {
+      "type": "object",
+      "required": ["source", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "const": "url" },
+        "url": {
+          "type": "string",
+          "pattern": "\\.git$",
+          "description": "Full git repository URL (must end with .git)"
+        },
+        "ref": {
+          "type": "string",
+          "description": "Git branch or tag"
+        },
+        "sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$",
+          "description": "Full 40-character git commit SHA"
+        }
+      }
+    },
+    "npmSource": {
+      "type": "object",
+      "required": ["source", "package"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "const": "npm" },
+        "package": {
+          "type": "string",
+          "description": "Package name or scoped package"
+        },
+        "version": {
+          "type": "string",
+          "description": "Version or version range"
+        },
+        "registry": {
+          "type": "string",
+          "format": "uri",
+          "description": "Custom npm registry URL"
+        }
+      }
+    },
+    "pipSource": {
+      "type": "object",
+      "required": ["source", "package"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "const": "pip" },
+        "package": {
+          "type": "string",
+          "description": "Package name"
+        },
+        "version": {
+          "type": "string",
+          "description": "Version specifier"
+        },
+        "registry": {
+          "type": "string",
+          "format": "uri",
+          "description": "Custom package registry URL"
+        }
+      }
+    },
+    "pluginEntry": {
+      "type": "object",
+      "required": ["name", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^ ]+$",
+          "description": "Plugin identifier (no spaces)"
+        },
+        "source": { "$ref": "#/$defs/pluginSource" },
+        "description": {
+          "type": "string",
+          "description": "Brief plugin description"
+        },
+        "version": {
+          "type": "string",
+          "description": "Plugin version"
+        },
+        "author": { "$ref": "#/$defs/author" },
+        "homepage": {
+          "type": "string",
+          "format": "uri",
+          "description": "Plugin homepage or documentation URL"
+        },
+        "repository": {
+          "type": "string",
+          "description": "Source code repository URL"
+        },
+        "license": {
+          "type": "string",
+          "description": "SPDX license identifier"
+        },
+        "keywords": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tags for plugin discovery and categorization"
+        },
+        "category": {
+          "type": "string",
+          "description": "Plugin category for organization"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tags for searchability"
+        },
+        "strict": {
+          "type": "boolean",
+          "default": true,
+          "description": "Controls whether plugin.json is the authority for component definitions"
+        },
+        "commands": {
+          "description": "Command definitions — path(s) or object map"
+        },
+        "agents": {
+          "description": "Agent definitions — path(s) to agent markdown files"
+        },
+        "skills": {
+          "description": "Skill definitions — path(s) to skill directories"
+        },
+        "hooks": {
+          "description": "Hook definitions or path to hooks file"
+        },
+        "mcpServers": {
+          "description": "MCP server configurations — paths or inline definitions"
+        },
+        "lspServers": {
+          "description": "LSP server configurations — paths or inline definitions"
+        },
+        "outputStyles": {
+          "description": "Output style definitions — path(s) to output style files"
+        },
+        "settings": {
+          "type": "object",
+          "description": "Settings to merge when plugin is enabled"
+        }
+      }
+    }
+  }
+}
