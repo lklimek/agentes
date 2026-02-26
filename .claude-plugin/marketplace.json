@@ -1,13 +1,12 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "agentes",
   "owner": {
-    "name": "lklimek",
-    "url": "https://github.com/lklimek"
+    "name": "lklimek"
   },
   "metadata": {
     "description": "Agentes in Rebus — AI agent plugins for blockchain developers. Skills, agents, and tools for the Dash Platform ecosystem and beyond.",
-    "version": "0.0.1",
-    "homepage": "https://github.com/lklimek/agentes"
+    "version": "0.0.1"
   },
   "plugins": [
     {
@@ -40,8 +39,7 @@
       },
       "version": "0.7.1",
       "author": {
-        "name": "lklimek",
-        "url": "https://github.com/lklimek"
+        "name": "lklimek"
       },
       "category": "productivity",
       "tags": [

@@ -17,6 +17,7 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -29,6 +30,9 @@ jobs:
 
       - name: Refresh all plugins
         run: python scripts/refresh_plugins.py
+
+      - name: Validate marketplace
+        run: python scripts/refresh_plugins.py validate
 
       - name: Commit and push
         run: |
