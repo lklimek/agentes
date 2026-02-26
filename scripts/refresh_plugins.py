@@ -93,15 +93,21 @@ def validate_marketplace(marketplace: dict) -> list[str]:
     )
     errors = [_format_error(e) for e in validator.iter_errors(marketplace)]
 
-    # Duplicate plugin names (not expressible in JSON Schema)
-    seen: set[str] = set()
-    for i, plugin in enumerate(marketplace.get("plugins", [])):
-        name = plugin.get("name")
-        if name is None:
-            continue
-        if name in seen:
-            errors.append(f'plugins.{i}.name: Duplicate plugin name "{name}"')
-        seen.add(name)
+    # Duplicate plugin names (not expressible in JSON Schema).
+    # Guard against malformed data — if plugins is not a list of dicts,
+    # the schema errors above already cover it.
+    plugins = marketplace.get("plugins", [])
+    if isinstance(plugins, list):
+        seen: set[str] = set()
+        for i, plugin in enumerate(plugins):
+            if not isinstance(plugin, dict):
+                continue
+            name = plugin.get("name")
+            if name is None:
+                continue
+            if name in seen:
+                errors.append(f'plugins.{i}.name: Duplicate plugin name "{name}"')
+            seen.add(name)
 
     return errors
 
