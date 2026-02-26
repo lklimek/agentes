@@ -167,38 +167,50 @@ def merge_plugin(entry: dict, source: dict) -> dict:
     return merged
 
 
-# Semver: digits-only core, optional pre-release/build suffix.
+# Semantic Versioning 2.0.0 (https://semver.org)
+#
+# A pre-release identifier is a dot-separated series of alphanumeric/hyphen
+# tokens.  Numeric-only identifiers MUST NOT have leading zeros.
+# Build metadata follows the same dot-separated format but has no ordering.
+_SEMVER_ID = r"(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)"
 _SEMVER_RE = re.compile(
-    r"^(?P<core>(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*)(?P<extra>[+-].+)?$"
+    rf"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
+    rf"(?:-(?P<pre>{_SEMVER_ID}(?:\.{_SEMVER_ID})*))?(?:\+(?P<build>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
 )
 
 
+def parse_semver(version: str) -> re.Match:
+    """Parse *version* as strict Semantic Versioning 2.0.0.
+
+    Returns the regex match on success.  Raises ``ValueError`` with a
+    descriptive message if the string does not conform.
+    """
+    m = _SEMVER_RE.match(version)
+    if not m:
+        raise ValueError(
+            f"Invalid semver: {version!r} — expected MAJOR.MINOR.PATCH"
+            f"[-PRERELEASE][+BUILD] per https://semver.org"
+        )
+    return m
+
+
 def bump_version(version: str) -> str:
-    """Increment the patch (last) segment of a version string.
+    """Increment the patch segment of a semver 2.0.0 version string.
 
     Pre-release and build metadata are stripped — bumping ``0.1.0-beta``
     produces ``0.1.0`` (the release that follows the pre-release), and
     bumping ``0.1.0`` produces ``0.1.1``.
 
-    Raises ``ValueError`` with a descriptive message if *version* is not
-    a valid dotted-numeric version (with optional semver suffixes).
+    Raises ``ValueError`` if *version* is not valid semver 2.0.0.
     """
-    m = _SEMVER_RE.match(version)
-    if not m:
-        raise ValueError(
-            f"Cannot bump version: {version!r} is not a valid "
-            f"dotted-numeric version (expected e.g. 0.1.0, 1.2.3-beta)"
-        )
+    m = parse_semver(version)
+    major, minor, patch = m.group("major"), m.group("minor"), m.group("patch")
 
-    core = m.group("core")
-    had_prerelease = m.group("extra") is not None
-
-    parts = core.split(".")
-    if had_prerelease:
+    if m.group("pre") is not None:
         # 0.1.0-beta → 0.1.0  (the release that follows the pre-release)
-        return core
-    parts[-1] = str(int(parts[-1]) + 1)
-    return ".".join(parts)
+        return f"{major}.{minor}.{patch}"
+
+    return f"{major}.{minor}.{int(patch) + 1}"
 
 
 def _serialize(marketplace: dict) -> str:
