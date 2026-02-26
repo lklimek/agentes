@@ -86,7 +86,7 @@ def main() -> None:
     if updated != original:
         current = marketplace.get("metadata", {}).get("version", "0.0.0")
         next_ver = bump_version(current)
-        marketplace["metadata"]["version"] = next_ver
+        marketplace.setdefault("metadata", {})["version"] = next_ver
         print(f"Marketplace version: {current} -> {next_ver}")
     else:
         print("No plugin changes detected")
