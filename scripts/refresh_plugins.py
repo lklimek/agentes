@@ -19,6 +19,7 @@ Requires:
 import base64
 import copy
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -166,9 +167,36 @@ def merge_plugin(entry: dict, source: dict) -> dict:
     return merged
 
 
+# Semver: digits-only core, optional pre-release/build suffix.
+_SEMVER_RE = re.compile(
+    r"^(?P<core>(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*)(?P<extra>[+-].+)?$"
+)
+
+
 def bump_version(version: str) -> str:
-    """Increment the last segment of a dotted version string."""
-    parts = version.split(".")
+    """Increment the patch (last) segment of a version string.
+
+    Pre-release and build metadata are stripped — bumping ``0.1.0-beta``
+    produces ``0.1.0`` (the release that follows the pre-release), and
+    bumping ``0.1.0`` produces ``0.1.1``.
+
+    Raises ``ValueError`` with a descriptive message if *version* is not
+    a valid dotted-numeric version (with optional semver suffixes).
+    """
+    m = _SEMVER_RE.match(version)
+    if not m:
+        raise ValueError(
+            f"Cannot bump version: {version!r} is not a valid "
+            f"dotted-numeric version (expected e.g. 0.1.0, 1.2.3-beta)"
+        )
+
+    core = m.group("core")
+    had_prerelease = m.group("extra") is not None
+
+    parts = core.split(".")
+    if had_prerelease:
+        # 0.1.0-beta → 0.1.0  (the release that follows the pre-release)
+        return core
     parts[-1] = str(int(parts[-1]) + 1)
     return ".".join(parts)
 
