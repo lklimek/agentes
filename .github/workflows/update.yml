@@ -1,0 +1,91 @@
+# .github/workflows/update-marketplace.yml
+#
+# Receives repository_dispatch events from plugin repos and
+# bumps the corresponding plugin version in marketplace.json.
+#
+# No extra secrets needed — uses default GITHUB_TOKEN for commits.
+
+name: Update marketplace
+
+on:
+  repository_dispatch:
+    types: [plugin-updated]
+
+  # Allow manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      plugin:
+        description: 'Plugin name (e.g. claudash)'
+        required: true
+      version:
+        description: 'New version (e.g. 1.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve inputs
+        id: params
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            PLUGIN='${{ github.event.client_payload.plugin }}'
+            VERSION='${{ github.event.client_payload.version }}'
+            SHA='${{ github.event.client_payload.sha }}'
+            ACTOR='${{ github.event.client_payload.actor }}'
+          else
+            PLUGIN='${{ github.event.inputs.plugin }}'
+            VERSION='${{ github.event.inputs.version }}'
+            SHA='manual'
+            ACTOR='${{ github.actor }}'
+          fi
+          echo "plugin=$PLUGIN" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "actor=$ACTOR" >> "$GITHUB_OUTPUT"
+          echo "Updating $PLUGIN to $VERSION (sha: $SHA)"
+
+      - name: Update marketplace.json
+        run: |
+          PLUGIN="${{ steps.params.outputs.plugin }}"
+          VERSION="${{ steps.params.outputs.version }}"
+          MARKETPLACE=".claude-plugin/marketplace.json"
+
+          # Check plugin exists in marketplace
+          FOUND=$(jq --arg name "$PLUGIN" '.plugins | map(select(.name == $name)) | length' "$MARKETPLACE")
+          if [ "$FOUND" = "0" ]; then
+            echo "::error::Plugin '$PLUGIN' not found in marketplace.json"
+            exit 1
+          fi
+
+          # Bump version
+          jq --arg name "$PLUGIN" \
+             --arg version "$VERSION" \
+             '.plugins = [.plugins[] | if .name == $name then .version = $version else . end]' \
+             "$MARKETPLACE" > tmp.json && mv tmp.json "$MARKETPLACE"
+
+          # Also bump marketplace metadata version (patch bump)
+          MARKET_VERSION=$(jq -r '.metadata.version // "1.0.0"' "$MARKETPLACE")
+          NEW_MARKET_VERSION=$(echo "$MARKET_VERSION" | awk -F. '{$NF = $NF + 1;} 1' OFS=.)
+          jq --arg v "$NEW_MARKET_VERSION" '.metadata.version = $v' "$MARKETPLACE" > tmp.json && mv tmp.json "$MARKETPLACE"
+
+          echo "Updated $PLUGIN to $VERSION, marketplace to $NEW_MARKET_VERSION"
+
+      - name: Commit and push
+        run: |
+          PLUGIN="${{ steps.params.outputs.plugin }}"
+          VERSION="${{ steps.params.outputs.version }}"
+          SHA="${{ steps.params.outputs.sha }}"
+
+          git config user.name "agentes[bot]"
+          git config user.email "agentes[bot]@users.noreply.github.com"
+          git add .claude-plugin/marketplace.json
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "bump $PLUGIN to $VERSION" \
+                     -m "Triggered by $PLUGIN@${SHA:0:7}"
+          git push
