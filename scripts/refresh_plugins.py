@@ -70,12 +70,17 @@ def main() -> None:
         name = plugin["name"]
         repo = plugin["source"]["repo"]
         print(f"::group::{name} ({repo})")
-
-        config = fetch_plugin_config(repo, session)
-        print(f"  Fetched config: {json.dumps(config, indent=2)}")
-        plugins[i] = merge_plugin(plugin, config)
-        print("::endgroup::")
-
+        try:
+            config = fetch_plugin_config(repo, session)
+            print(f"  Fetched config: {json.dumps(config, indent=2)}")
+            plugins[i] = merge_plugin(plugin, config)
+        except Exception as e:
+            print(
+                f"  Error refreshing plugin {name} from {repo}: {e}",
+                file=sys.stderr,
+            )
+        finally:
+            print("::endgroup::")
     # Bump marketplace version only if plugin data actually changed
     updated = json.dumps(marketplace, indent=2, ensure_ascii=False)
     if updated != original:
