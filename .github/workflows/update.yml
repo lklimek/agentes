@@ -1,91 +1,91 @@
-# .github/workflows/update-marketplace.yml
+# .github/workflows/update.yml
 #
-# Receives repository_dispatch events from plugin repos and
-# bumps the corresponding plugin version in marketplace.json.
+# Refreshes all plugins by fetching their .claude-plugin/plugin.json
+# from each source repo and updating marketplace.json accordingly.
 #
-# No extra secrets needed — uses default GITHUB_TOKEN for commits.
+# No external input is parsed — plugin sources are read from
+# marketplace.json and configs are fetched directly via GitHub API.
 
-name: Update marketplace
+name: Refresh plugins
 
 on:
-  repository_dispatch:
-    types: [plugin-updated]
-
-  # Allow manual trigger for testing
   workflow_dispatch:
-    inputs:
-      plugin:
-        description: 'Plugin name (e.g. claudash)'
-        required: true
-      version:
-        description: 'New version (e.g. 1.2.0)'
-        required: true
+  schedule:
+    - cron: '0 */6 * * *'
 
 permissions:
   contents: write
 
 jobs:
-  update:
+  refresh:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve inputs
-        id: params
+      - name: Refresh all plugins
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            PLUGIN='${{ github.event.client_payload.plugin }}'
-            VERSION='${{ github.event.client_payload.version }}'
-            SHA='${{ github.event.client_payload.sha }}'
-            ACTOR='${{ github.event.client_payload.actor }}'
-          else
-            PLUGIN='${{ github.event.inputs.plugin }}'
-            VERSION='${{ github.event.inputs.version }}'
-            SHA='manual'
-            ACTOR='${{ github.actor }}'
-          fi
-          echo "plugin=$PLUGIN" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "actor=$ACTOR" >> "$GITHUB_OUTPUT"
-          echo "Updating $PLUGIN to $VERSION (sha: $SHA)"
-
-      - name: Update marketplace.json
-        run: |
-          PLUGIN="${{ steps.params.outputs.plugin }}"
-          VERSION="${{ steps.params.outputs.version }}"
           MARKETPLACE=".claude-plugin/marketplace.json"
 
-          # Check plugin exists in marketplace
-          FOUND=$(jq --arg name "$PLUGIN" '.plugins | map(select(.name == $name)) | length' "$MARKETPLACE")
-          if [ "$FOUND" = "0" ]; then
-            echo "::error::Plugin '$PLUGIN' not found in marketplace.json"
-            exit 1
+          # Save original to detect actual changes
+          cp "$MARKETPLACE" marketplace.orig.json
+
+          PLUGIN_COUNT=$(jq '.plugins | length' "$MARKETPLACE")
+          echo "Found $PLUGIN_COUNT plugin(s) in marketplace"
+
+          for i in $(seq 0 $(( PLUGIN_COUNT - 1 ))); do
+            NAME=$(jq -r ".plugins[$i].name" "$MARKETPLACE")
+            REPO=$(jq -r ".plugins[$i].source.repo" "$MARKETPLACE")
+
+            echo "::group::$NAME ($REPO)"
+
+            # Fetch plugin.json from source repo (default branch)
+            if ! RAW=$(gh api "repos/$REPO/contents/.claude-plugin/plugin.json" --jq '.content' 2>&1); then
+              echo "::warning::Could not fetch config for $NAME from $REPO — $RAW"
+              echo "::endgroup::"
+              continue
+            fi
+
+            if ! PLUGIN_JSON=$(echo "$RAW" | base64 -d 2>&1); then
+              echo "::warning::Could not decode config for $NAME — $PLUGIN_JSON"
+              echo "::endgroup::"
+              continue
+            fi
+
+            echo "Fetched config:"
+            echo "$PLUGIN_JSON" | jq .
+
+            # Merge relevant fields into marketplace entry
+            jq --argjson idx "$i" --argjson src "$PLUGIN_JSON" '
+              .plugins[$idx].version     = ($src.version     // .plugins[$idx].version)     |
+              .plugins[$idx].description = ($src.description // .plugins[$idx].description) |
+              .plugins[$idx].author      = ($src.author      // .plugins[$idx].author)      |
+              .plugins[$idx].category    = ($src.category    // .plugins[$idx].category)    |
+              .plugins[$idx].tags        = ($src.tags        // .plugins[$idx].tags)
+            ' "$MARKETPLACE" > tmp.json && mv tmp.json "$MARKETPLACE"
+
+            echo "::endgroup::"
+          done
+
+          # Bump marketplace version only if plugin data changed
+          if ! diff -q marketplace.orig.json "$MARKETPLACE" > /dev/null 2>&1; then
+            CURRENT=$(jq -r '.metadata.version // "0.0.0"' "$MARKETPLACE")
+            NEXT=$(echo "$CURRENT" | awk -F. '{ $NF = $NF + 1 } 1' OFS=.)
+            jq --arg v "$NEXT" '.metadata.version = $v' "$MARKETPLACE" > tmp.json && mv tmp.json "$MARKETPLACE"
+            echo "Marketplace version: $CURRENT -> $NEXT"
+          else
+            echo "No plugin changes detected"
           fi
 
-          # Bump version
-          jq --arg name "$PLUGIN" \
-             --arg version "$VERSION" \
-             '.plugins = [.plugins[] | if .name == $name then .version = $version else . end]' \
-             "$MARKETPLACE" > tmp.json && mv tmp.json "$MARKETPLACE"
-
-          # Also bump marketplace metadata version (patch bump)
-          MARKET_VERSION=$(jq -r '.metadata.version // "1.0.0"' "$MARKETPLACE")
-          NEW_MARKET_VERSION=$(echo "$MARKET_VERSION" | awk -F. '{$NF = $NF + 1;} 1' OFS=.)
-          jq --arg v "$NEW_MARKET_VERSION" '.metadata.version = $v' "$MARKETPLACE" > tmp.json && mv tmp.json "$MARKETPLACE"
-
-          echo "Updated $PLUGIN to $VERSION, marketplace to $NEW_MARKET_VERSION"
+          rm -f marketplace.orig.json
 
       - name: Commit and push
         run: |
-          PLUGIN="${{ steps.params.outputs.plugin }}"
-          VERSION="${{ steps.params.outputs.version }}"
-          SHA="${{ steps.params.outputs.sha }}"
-
           git config user.name "agentes[bot]"
           git config user.email "agentes[bot]@users.noreply.github.com"
           git add .claude-plugin/marketplace.json
-          git diff --cached --quiet && echo "No changes" && exit 0
-          git commit -m "bump $PLUGIN to $VERSION" \
-                     -m "Triggered by $PLUGIN@${SHA:0:7}"
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "refresh plugins" \
+                     -m "Fetched latest configs from all plugin sources."
           git push
