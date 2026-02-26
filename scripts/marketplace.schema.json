@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "title": "Claude Code Plugin Marketplace",
+  "description": "Schema for Claude Code plugin marketplace configuration files, derived from the official documentation at https://code.claude.com/docs/en/plugin-marketplaces",
+  "type": "object",
+  "required": ["name", "owner", "plugins"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri"
+    },
+    "name": {
+      "type": "string",
+      "description": "Marketplace identifier (kebab-case, no spaces)"
+    },
+    "owner": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the maintainer or team"
+        },
+        "email": {
+          "type": "string",
+          "description": "Contact email for the maintainer"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Brief marketplace description"
+        },
+        "version": {
+          "type": "string",
+          "description": "Marketplace version"
+        },
+        "pluginRoot": {
+          "type": "string",
+          "description": "Base directory prepended to relative plugin source paths"
+        }
+      }
+    },
+    "plugins": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/pluginEntry" }
+    }
+  },
+  "$defs": {
+    "pluginEntry": {
+      "type": "object",
+      "required": ["name", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Plugin identifier (kebab-case, no spaces)"
+        },
+        "source": {
+          "description": "Where to fetch the plugin from",
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Relative path within the marketplace repo (must start with ./)"
+            },
+            { "$ref": "#/$defs/githubSource" },
+            { "$ref": "#/$defs/urlSource" },
+            { "$ref": "#/$defs/npmSource" },
+            { "$ref": "#/$defs/pipSource" }
+          ]
+        },
+        "description": {
+          "type": "string",
+          "description": "Brief plugin description"
+        },
+        "version": {
+          "type": "string",
+          "description": "Plugin version"
+        },
+        "author": {
+          "type": "object",
+          "required": ["name"],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Author name"
+            },
+            "email": {
+              "type": "string",
+              "description": "Author email"
+            }
+          }
+        },
+        "homepage": {
+          "type": "string",
+          "description": "Plugin homepage or documentation URL"
+        },
+        "repository": {
+          "type": "string",
+          "description": "Source code repository URL"
+        },
+        "license": {
+          "type": "string",
+          "description": "SPDX license identifier"
+        },
+        "keywords": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tags for plugin discovery and categorization"
+        },
+        "category": {
+          "type": "string",
+          "description": "Plugin category for organization"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tags for searchability"
+        },
+        "strict": {
+          "type": "boolean",
+          "description": "Controls whether plugin.json is the authority for component definitions (default: true)"
+        },
+        "commands": {
+          "description": "Custom paths to command files or directories",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "agents": {
+          "description": "Custom paths to agent files",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "skills": {
+          "description": "Custom paths to skill directories",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "hooks": {
+          "description": "Custom hooks configuration or path to hooks file",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array" },
+            { "type": "object" }
+          ]
+        },
+        "mcpServers": {
+          "description": "MCP server configurations or path to MCP config",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array" },
+            { "type": "object" }
+          ]
+        },
+        "lspServers": {
+          "description": "LSP server configurations or path to LSP config",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array" },
+            { "type": "object" }
+          ]
+        },
+        "outputStyles": {
+          "description": "Output style files or directories",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        }
+      }
+    },
+    "githubSource": {
+      "type": "object",
+      "required": ["source", "repo"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "const": "github" },
+        "repo": {
+          "type": "string",
+          "description": "GitHub repository in owner/repo format"
+        },
+        "ref": {
+          "type": "string",
+          "description": "Git branch or tag"
+        },
+        "sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Full 40-character git commit SHA"
+        }
+      }
+    },
+    "urlSource": {
+      "type": "object",
+      "required": ["source", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "const": "url" },
+        "url": {
+          "type": "string",
+          "description": "Full git repository URL (must end with .git)"
+        },
+        "ref": {
+          "type": "string",
+          "description": "Git branch or tag"
+        },
+        "sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Full 40-character git commit SHA"
+        }
+      }
+    },
+    "npmSource": {
+      "type": "object",
+      "required": ["source", "package"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "const": "npm" },
+        "package": {
+          "type": "string",
+          "description": "Package name or scoped package"
+        },
+        "version": {
+          "type": "string",
+          "description": "Version or version range"
+        },
+        "registry": {
+          "type": "string",
+          "description": "Custom npm registry URL"
+        }
+      }
+    },
+    "pipSource": {
+      "type": "object",
+      "required": ["source", "package"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "const": "pip" },
+        "package": {
+          "type": "string",
+          "description": "Package name"
+        },
+        "version": {
+          "type": "string",
+          "description": "Version specifier"
+        },
+        "registry": {
+          "type": "string",
+          "description": "Custom package registry URL"
+        }
+      }
+    }
+  }
+}

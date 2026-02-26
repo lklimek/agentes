@@ -7,11 +7,12 @@ each plugin's source repository via the GitHub API (unauthenticated — all
 source repos are public), merges updated fields, and bumps the marketplace
 version if anything changed.
 
-Supports a ``validate`` subcommand that checks the marketplace file for
-structural correctness and undocumented fields.
+Supports a ``validate`` subcommand that checks the marketplace file against
+the JSON Schema (fetched from the ``$schema`` URL, with a bundled fallback).
 
 Requires:
-  - requests library (`pip install requests`)
+  - requests   (`pip install requests`)
+  - jsonschema (`pip install jsonschema`)
 """
 
 import base64
@@ -20,6 +21,7 @@ import json
 import sys
 from pathlib import Path
 
+import jsonschema
 import requests
 
 MARKETPLACE_PATH = Path(".claude-plugin/marketplace.json")
@@ -27,108 +29,58 @@ PLUGIN_CONFIG_PATH = ".claude-plugin/plugin.json"
 GITHUB_API = "https://api.github.com"
 REQUEST_TIMEOUT = 10
 
-# ── Documented field sets (from Claude Code plugin marketplace spec) ─────
-
-DOCUMENTED_TOP_LEVEL_FIELDS = frozenset(
-    {"$schema", "name", "owner", "plugins", "metadata"}
-)
-
-DOCUMENTED_OWNER_FIELDS = frozenset({"name", "email"})
-
-DOCUMENTED_METADATA_FIELDS = frozenset({"description", "version", "pluginRoot"})
-
-DOCUMENTED_PLUGIN_FIELDS = frozenset(
-    {
-        "name",
-        "source",
-        "description",
-        "version",
-        "author",
-        "homepage",
-        "repository",
-        "license",
-        "keywords",
-        "category",
-        "tags",
-        "strict",
-        "commands",
-        "agents",
-        "skills",
-        "hooks",
-        "mcpServers",
-        "lspServers",
-        "outputStyles",
-    }
-)
-
-DOCUMENTED_AUTHOR_FIELDS = frozenset({"name", "email"})
+BUNDLED_SCHEMA_PATH = Path(__file__).parent / "marketplace.schema.json"
 
 # Fields that the marketplace controls — never overwritten from source.
 PROTECTED_FIELDS = frozenset({"name", "source"})
+
+
+# ── Schema loading ───────────────────────────────────────────────────────
+
+
+def _fetch_remote_schema(url: str) -> dict | None:
+    """Try to fetch a JSON Schema from *url*; return ``None`` on failure."""
+    try:
+        resp = requests.get(url, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None
+
+
+def load_schema(marketplace: dict) -> dict:
+    """Load the marketplace JSON Schema.
+
+    1. If the marketplace declares a ``$schema`` URL, try fetching it.
+    2. Fall back to the bundled schema shipped alongside this script.
+    """
+    schema_url = marketplace.get("$schema")
+    if schema_url:
+        schema = _fetch_remote_schema(schema_url)
+        if schema:
+            print(f"Using remote schema from {schema_url}")
+            return schema
+        print(f"Remote schema unavailable ({schema_url}), using bundled fallback")
+
+    return json.loads(BUNDLED_SCHEMA_PATH.read_text())
 
 
 # ── Validation ───────────────────────────────────────────────────────────
 
 
 def validate_marketplace(marketplace: dict) -> list[str]:
-    """Return a list of validation errors (empty means valid)."""
-    errors: list[str] = []
+    """Validate *marketplace* against the JSON Schema.
 
-    # Top-level required fields
-    for field in ("name", "owner", "plugins"):
-        if field not in marketplace:
-            errors.append(f"Missing required top-level field: {field}")
+    Returns a list of human-readable error messages (empty == valid).
+    """
+    schema = load_schema(marketplace)
+    validator = jsonschema.Draft202012Validator(schema)
+    return [_format_error(e) for e in validator.iter_errors(marketplace)]
 
-    # Top-level unknown fields
-    for key in marketplace:
-        if key not in DOCUMENTED_TOP_LEVEL_FIELDS:
-            errors.append(f"Undocumented top-level field: {key}")
 
-    # Owner
-    owner = marketplace.get("owner", {})
-    if isinstance(owner, dict):
-        if "name" not in owner:
-            errors.append("Missing required field: owner.name")
-        for key in owner:
-            if key not in DOCUMENTED_OWNER_FIELDS:
-                errors.append(f"Undocumented owner field: {key}")
-
-    # Metadata
-    metadata = marketplace.get("metadata", {})
-    if isinstance(metadata, dict):
-        for key in metadata:
-            if key not in DOCUMENTED_METADATA_FIELDS:
-                errors.append(f"Undocumented metadata field: {key}")
-
-    # Plugins
-    plugins = marketplace.get("plugins", [])
-    if not isinstance(plugins, list):
-        errors.append("plugins must be an array")
-        return errors
-
-    seen_names: set[str] = set()
-    for i, plugin in enumerate(plugins):
-        label = plugin.get("name", f"plugins[{i}]")
-        if "name" not in plugin:
-            errors.append(f"{label}: Missing required field: name")
-        else:
-            if plugin["name"] in seen_names:
-                errors.append(f'{label}: Duplicate plugin name "{plugin["name"]}"')
-            seen_names.add(plugin["name"])
-        if "source" not in plugin:
-            errors.append(f"{label}: Missing required field: source")
-
-        for key in plugin:
-            if key not in DOCUMENTED_PLUGIN_FIELDS:
-                errors.append(f"{label}: Undocumented plugin field: {key}")
-
-        author = plugin.get("author")
-        if isinstance(author, dict):
-            for key in author:
-                if key not in DOCUMENTED_AUTHOR_FIELDS:
-                    errors.append(f"{label}: Undocumented author field: {key}")
-
-    return errors
+def _format_error(error: jsonschema.ValidationError) -> str:
+    path = ".".join(str(p) for p in error.absolute_path) if error.absolute_path else "(root)"
+    return f"{path}: {error.message}"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -145,11 +97,32 @@ def fetch_plugin_config(repo: str, session: requests.Session) -> dict:
     return json.loads(raw)
 
 
+def _documented_plugin_fields() -> frozenset[str]:
+    """Return the set of allowed plugin-entry property names from the bundled schema."""
+    schema = json.loads(BUNDLED_SCHEMA_PATH.read_text())
+    props = schema.get("$defs", {}).get("pluginEntry", {}).get("properties", {})
+    return frozenset(props.keys())
+
+
+def _documented_author_fields() -> frozenset[str]:
+    """Return the set of allowed author property names from the bundled schema."""
+    schema = json.loads(BUNDLED_SCHEMA_PATH.read_text())
+    author = (
+        schema.get("$defs", {})
+        .get("pluginEntry", {})
+        .get("properties", {})
+        .get("author", {})
+        .get("properties", {})
+    )
+    return frozenset(author.keys())
+
+
 def _filter_author(author: object) -> dict | None:
-    """Keep only documented author fields."""
+    """Keep only schema-documented author fields."""
     if not isinstance(author, dict):
         return None
-    filtered = {k: v for k, v in author.items() if k in DOCUMENTED_AUTHOR_FIELDS}
+    allowed = _documented_author_fields()
+    filtered = {k: v for k, v in author.items() if k in allowed}
     return filtered if filtered else None
 
 
@@ -162,6 +135,7 @@ def merge_plugin(entry: dict, source: dict) -> dict:
     * Fields present in the entry but absent from source (except protected)
       are dropped.
     """
+    documented = _documented_plugin_fields()
     merged: dict = {}
 
     # Keep protected fields from marketplace entry
@@ -170,7 +144,7 @@ def merge_plugin(entry: dict, source: dict) -> dict:
             merged[field] = copy.deepcopy(entry[field])
 
     # Copy documented fields from source
-    for field in DOCUMENTED_PLUGIN_FIELDS - PROTECTED_FIELDS:
+    for field in documented - PROTECTED_FIELDS:
         if field in source:
             merged[field] = copy.deepcopy(source[field])
 
