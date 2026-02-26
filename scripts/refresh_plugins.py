@@ -230,6 +230,16 @@ def cmd_refresh() -> None:
         sys.exit(f"Error: {MARKETPLACE_PATH} not found")
 
     marketplace = json.loads(MARKETPLACE_PATH.read_text())
+
+    # Validate up-front so malformed entries surface as schema errors
+    # rather than cryptic KeyErrors during the refresh loop.
+    errors = validate_marketplace(marketplace)
+    if errors:
+        print("Marketplace validation failed (fix before refreshing):", file=sys.stderr)
+        for err in errors:
+            print(f"  - {err}", file=sys.stderr)
+        sys.exit(1)
+
     original = json.dumps(marketplace, indent=2, ensure_ascii=False)
 
     session = requests.Session()
