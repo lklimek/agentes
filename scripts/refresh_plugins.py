@@ -14,17 +14,18 @@ the JSON Schema.
 Requires:
   - requests   (`pip install requests`)
   - jsonschema (`pip install jsonschema`)
+  - semver     (`pip install semver`)
 """
 
 import base64
 import copy
 import json
-import re
 import sys
 from pathlib import Path
 
 import jsonschema
 import requests
+import semver
 
 MARKETPLACE_PATH = Path(".claude-plugin/marketplace.json")
 PLUGIN_CONFIG_PATH = ".claude-plugin/plugin.json"
@@ -167,33 +168,6 @@ def merge_plugin(entry: dict, source: dict) -> dict:
     return merged
 
 
-# Semantic Versioning 2.0.0 (https://semver.org)
-#
-# A pre-release identifier is a dot-separated series of alphanumeric/hyphen
-# tokens.  Numeric-only identifiers MUST NOT have leading zeros.
-# Build metadata follows the same dot-separated format but has no ordering.
-_SEMVER_ID = r"(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)"
-_SEMVER_RE = re.compile(
-    rf"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
-    rf"(?:-(?P<pre>{_SEMVER_ID}(?:\.{_SEMVER_ID})*))?(?:\+(?P<build>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
-)
-
-
-def parse_semver(version: str) -> re.Match:
-    """Parse *version* as strict Semantic Versioning 2.0.0.
-
-    Returns the regex match on success.  Raises ``ValueError`` with a
-    descriptive message if the string does not conform.
-    """
-    m = _SEMVER_RE.match(version)
-    if not m:
-        raise ValueError(
-            f"Invalid semver: {version!r} — expected MAJOR.MINOR.PATCH"
-            f"[-PRERELEASE][+BUILD] per https://semver.org"
-        )
-    return m
-
-
 def bump_version(version: str) -> str:
     """Increment the patch segment of a semver 2.0.0 version string.
 
@@ -203,14 +177,13 @@ def bump_version(version: str) -> str:
 
     Raises ``ValueError`` if *version* is not valid semver 2.0.0.
     """
-    m = parse_semver(version)
-    major, minor, patch = m.group("major"), m.group("minor"), m.group("patch")
+    v = semver.Version.parse(version)
 
-    if m.group("pre") is not None:
+    if v.prerelease is not None:
         # 0.1.0-beta → 0.1.0  (the release that follows the pre-release)
-        return f"{major}.{minor}.{patch}"
+        return str(v.finalize_version())
 
-    return f"{major}.{minor}.{int(patch) + 1}"
+    return str(v.bump_patch())
 
 
 def _serialize(marketplace: dict) -> str:
