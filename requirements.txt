@@ -1,0 +1,4 @@
+# Runtime dependencies for scripts/refresh_plugins.py
+requests>=2.31,<3
+jsonschema[format]>=4.20,<5
+semver>=3,<4
