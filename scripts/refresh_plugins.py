@@ -23,12 +23,13 @@ MARKETPLACE_PATH = Path(".claude-plugin/marketplace.json")
 PLUGIN_CONFIG_PATH = ".claude-plugin/plugin.json"
 MERGE_FIELDS = ("version", "description", "author", "category", "tags")
 GITHUB_API = "https://api.github.com"
+REQUEST_TIMEOUT = 10
 
 
 def fetch_plugin_config(repo: str, session: requests.Session) -> dict:
     """Fetch and decode .claude-plugin/plugin.json from a GitHub repo."""
     url = f"{GITHUB_API}/repos/{repo}/contents/{PLUGIN_CONFIG_PATH}"
-    resp = session.get(url)
+    resp = session.get(url, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
 
     content_b64 = resp.json()["content"]
