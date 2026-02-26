@@ -10,8 +10,6 @@ name: Refresh plugins
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 */6 * * *'
 
 permissions:
   contents: write
@@ -22,63 +20,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
       - name: Refresh all plugins
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          MARKETPLACE=".claude-plugin/marketplace.json"
-
-          # Save original to detect actual changes
-          cp "$MARKETPLACE" marketplace.orig.json
-
-          PLUGIN_COUNT=$(jq '.plugins | length' "$MARKETPLACE")
-          echo "Found $PLUGIN_COUNT plugin(s) in marketplace"
-
-          for i in $(seq 0 $(( PLUGIN_COUNT - 1 ))); do
-            NAME=$(jq -r ".plugins[$i].name" "$MARKETPLACE")
-            REPO=$(jq -r ".plugins[$i].source.repo" "$MARKETPLACE")
-
-            echo "::group::$NAME ($REPO)"
-
-            # Fetch plugin.json from source repo (default branch)
-            if ! RAW=$(gh api "repos/$REPO/contents/.claude-plugin/plugin.json" --jq '.content' 2>&1); then
-              echo "::warning::Could not fetch config for $NAME from $REPO — $RAW"
-              echo "::endgroup::"
-              continue
-            fi
-
-            if ! PLUGIN_JSON=$(echo "$RAW" | base64 -d 2>&1); then
-              echo "::warning::Could not decode config for $NAME — $PLUGIN_JSON"
-              echo "::endgroup::"
-              continue
-            fi
-
-            echo "Fetched config:"
-            echo "$PLUGIN_JSON" | jq .
-
-            # Merge relevant fields into marketplace entry
-            jq --argjson idx "$i" --argjson src "$PLUGIN_JSON" '
-              .plugins[$idx].version     = ($src.version     // .plugins[$idx].version)     |
-              .plugins[$idx].description = ($src.description // .plugins[$idx].description) |
-              .plugins[$idx].author      = ($src.author      // .plugins[$idx].author)      |
-              .plugins[$idx].category    = ($src.category    // .plugins[$idx].category)    |
-              .plugins[$idx].tags        = ($src.tags        // .plugins[$idx].tags)
-            ' "$MARKETPLACE" > tmp.json && mv tmp.json "$MARKETPLACE"
-
-            echo "::endgroup::"
-          done
-
-          # Bump marketplace version only if plugin data changed
-          if ! diff -q marketplace.orig.json "$MARKETPLACE" > /dev/null 2>&1; then
-            CURRENT=$(jq -r '.metadata.version // "0.0.0"' "$MARKETPLACE")
-            NEXT=$(echo "$CURRENT" | awk -F. '{ $NF = $NF + 1 } 1' OFS=.)
-            jq --arg v "$NEXT" '.metadata.version = $v' "$MARKETPLACE" > tmp.json && mv tmp.json "$MARKETPLACE"
-            echo "Marketplace version: $CURRENT -> $NEXT"
-          else
-            echo "No plugin changes detected"
-          fi
-
-          rm -f marketplace.orig.json
+        run: python scripts/refresh_plugins.py
 
       - name: Commit and push
         run: |
