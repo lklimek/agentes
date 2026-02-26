@@ -35,9 +35,10 @@ BUNDLED_SCHEMA_PATH = Path(__file__).parent / "marketplace.schema.json"
 PROTECTED_FIELDS = frozenset({"name", "source"})
 
 # Marketplace-specific fields: exist only in marketplace entries, never in
-# plugin.json manifests.  Preserved from the entry when source doesn't
-# provide them; source wins if it does (unlikely but harmless).
-MARKETPLACE_ONLY_FIELDS = frozenset({"category", "tags", "strict", "settings"})
+# plugin.json manifests (confirmed via Zod: marketplace entry is
+# pluginManifest.partial().extend({source, category, tags, strict})).
+# Preserved from the entry when source doesn't provide them.
+MARKETPLACE_ONLY_FIELDS = frozenset({"category", "tags", "strict"})
 
 
 # ── Schema loading ───────────────────────────────────────────────────────
