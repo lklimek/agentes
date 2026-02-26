@@ -3,18 +3,17 @@
 Refresh marketplace plugins by fetching plugin.json from each source repo.
 
 Reads .claude-plugin/marketplace.json, fetches the latest plugin config from
-each plugin's source repository via the GitHub API, merges updated fields,
-and bumps the marketplace version if anything changed.
+each plugin's source repository via the GitHub API (unauthenticated — all
+source repos are public), merges updated fields, and bumps the marketplace
+version if anything changed.
 
 Requires:
-  - GITHUB_TOKEN environment variable (or GH_TOKEN)
   - requests library (`pip install requests`)
 """
 
 import base64
 import copy
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -26,28 +25,15 @@ MERGE_FIELDS = ("version", "description", "author", "category", "tags")
 GITHUB_API = "https://api.github.com"
 
 
-def get_token() -> str:
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if not token:
-        sys.exit("Error: set GH_TOKEN or GITHUB_TOKEN environment variable")
-    return token
-
-
-def fetch_plugin_config(repo: str, session: requests.Session) -> dict | None:
+def fetch_plugin_config(repo: str, session: requests.Session) -> dict:
     """Fetch and decode .claude-plugin/plugin.json from a GitHub repo."""
     url = f"{GITHUB_API}/repos/{repo}/contents/{PLUGIN_CONFIG_PATH}"
     resp = session.get(url)
-    if resp.status_code != 200:
-        print(f"  ::warning::Could not fetch config from {repo} — HTTP {resp.status_code}")
-        return None
+    resp.raise_for_status()
 
-    content_b64 = resp.json().get("content", "")
-    try:
-        raw = base64.b64decode(content_b64)
-        return json.loads(raw)
-    except (ValueError, json.JSONDecodeError) as exc:
-        print(f"  ::warning::Could not decode config from {repo} — {exc}")
-        return None
+    content_b64 = resp.json()["content"]
+    raw = base64.b64decode(content_b64)
+    return json.loads(raw)
 
 
 def merge_plugin(entry: dict, source: dict) -> dict:
@@ -73,12 +59,8 @@ def main() -> None:
     marketplace = json.loads(MARKETPLACE_PATH.read_text())
     original = json.dumps(marketplace, indent=2, ensure_ascii=False)
 
-    token = get_token()
     session = requests.Session()
-    session.headers.update({
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-    })
+    session.headers["Accept"] = "application/vnd.github+json"
 
     plugins = marketplace.get("plugins", [])
     print(f"Found {len(plugins)} plugin(s) in marketplace")
@@ -89,10 +71,6 @@ def main() -> None:
         print(f"::group::{name} ({repo})")
 
         config = fetch_plugin_config(repo, session)
-        if config is None:
-            print("::endgroup::")
-            continue
-
         print(f"  Fetched config: {json.dumps(config, indent=2)}")
         plugins[i] = merge_plugin(plugin, config)
         print("::endgroup::")
