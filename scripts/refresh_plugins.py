@@ -107,13 +107,7 @@ def _documented_plugin_fields() -> frozenset[str]:
 def _documented_author_fields() -> frozenset[str]:
     """Return the set of allowed author property names from the bundled schema."""
     schema = json.loads(BUNDLED_SCHEMA_PATH.read_text())
-    author = (
-        schema.get("$defs", {})
-        .get("pluginEntry", {})
-        .get("properties", {})
-        .get("author", {})
-        .get("properties", {})
-    )
+    author = schema.get("$defs", {}).get("author", {}).get("properties", {})
     return frozenset(author.keys())
 
 
