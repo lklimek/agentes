@@ -212,7 +212,19 @@ def cmd_refresh() -> None:
 
     for i, plugin in enumerate(plugins):
         name = plugin["name"]
-        repo = plugin["source"]["repo"]
+        source = plugin.get("source", {})
+
+        # Only GitHub sources can be refreshed; skip all others.
+        if isinstance(source, str):
+            print(f"  Skipping {name}: relative-path source ({source})")
+            continue
+        source_type = source.get("source")
+        if source_type != "github":
+            label = source_type or "unknown"
+            print(f"  Skipping {name}: non-GitHub source ({label})")
+            continue
+
+        repo = source["repo"]
         print(f"::group::{name} ({repo})")
         try:
             config = fetch_plugin_config(repo, session)
