@@ -87,7 +87,10 @@ def validate_marketplace(marketplace: dict) -> list[str]:
     Includes checks that JSON Schema cannot express (duplicate names).
     """
     schema = _load_schema(str(MARKETPLACE_SCHEMA_PATH))
-    validator = jsonschema.Draft202012Validator(schema)
+    validator = jsonschema.Draft202012Validator(
+        schema,
+        format_checker=jsonschema.Draft202012Validator.FORMAT_CHECKER,
+    )
     errors = [_format_error(e) for e in validator.iter_errors(marketplace)]
 
     # Duplicate plugin names (not expressible in JSON Schema)
@@ -109,7 +112,10 @@ def validate_plugin_config(config: dict) -> list[str]:
     Returns a list of human-readable error messages (empty == valid).
     """
     schema = _load_schema(str(PLUGIN_SCHEMA_PATH))
-    validator = jsonschema.Draft202012Validator(schema)
+    validator = jsonschema.Draft202012Validator(
+        schema,
+        format_checker=jsonschema.Draft202012Validator.FORMAT_CHECKER,
+    )
     return [_format_error(e) for e in validator.iter_errors(config)]
 
 
