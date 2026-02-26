@@ -26,13 +26,10 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install requests jsonschema
+        run: pip install requests jsonschema semver
 
       - name: Refresh all plugins
         run: python scripts/refresh_plugins.py
-
-      - name: Validate marketplace
-        run: python scripts/refresh_plugins.py validate
 
       - name: Commit and push
         run: |

@@ -3,10 +3,10 @@
 Refresh marketplace plugins by fetching plugin.json from each source repo.
 
 Reads .claude-plugin/marketplace.json, fetches the latest plugin config from
-each plugin's source repository via the GitHub API (unauthenticated — all
-source repos are public), validates each fetched config against the plugin
-manifest schema, merges updated fields, validates the final marketplace
-file, and bumps the marketplace version if anything changed.
+each plugin's source repository via the GitHub API, validates each fetched
+config against the plugin manifest schema, merges updated fields, validates
+the final marketplace file, and bumps the marketplace version if anything
+changed.
 
 Supports a ``validate`` subcommand that checks the marketplace file against
 the JSON Schema.
@@ -21,6 +21,7 @@ import base64
 import copy
 import json
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 import jsonschema
@@ -45,13 +46,35 @@ PROTECTED_FIELDS = frozenset({"name", "source"})
 # Preserved from the entry when source doesn't provide them.
 MARKETPLACE_ONLY_FIELDS = frozenset({"category", "tags", "strict"})
 
+# Canonical key order for merged plugin entries.  Keys not listed here are
+# appended in alphabetical order.
+_KEY_ORDER = [
+    "name",
+    "source",
+    "version",
+    "description",
+    "author",
+    "homepage",
+    "repository",
+    "license",
+    "keywords",
+    "category",
+    "tags",
+    "strict",
+]
+
 
 # ── Schema loading ───────────────────────────────────────────────────────
 
 
-def _load_schema(path: Path) -> dict:
-    """Load a JSON Schema from a local file."""
-    return json.loads(path.read_text())
+@lru_cache(maxsize=4)
+def _load_schema(path: str) -> dict:
+    """Load and cache a JSON Schema from a local file.
+
+    *path* is accepted as ``str`` (not ``Path``) so it is hashable for
+    ``lru_cache``.
+    """
+    return json.loads(Path(path).read_text())
 
 
 # ── Validation ───────────────────────────────────────────────────────────
@@ -63,7 +86,7 @@ def validate_marketplace(marketplace: dict) -> list[str]:
     Returns a list of human-readable error messages (empty == valid).
     Includes checks that JSON Schema cannot express (duplicate names).
     """
-    schema = _load_schema(MARKETPLACE_SCHEMA_PATH)
+    schema = _load_schema(str(MARKETPLACE_SCHEMA_PATH))
     validator = jsonschema.Draft202012Validator(schema)
     errors = [_format_error(e) for e in validator.iter_errors(marketplace)]
 
@@ -85,7 +108,7 @@ def validate_plugin_config(config: dict) -> list[str]:
 
     Returns a list of human-readable error messages (empty == valid).
     """
-    schema = _load_schema(PLUGIN_SCHEMA_PATH)
+    schema = _load_schema(str(PLUGIN_SCHEMA_PATH))
     validator = jsonschema.Draft202012Validator(schema)
     return [_format_error(e) for e in validator.iter_errors(config)]
 
@@ -104,21 +127,27 @@ def fetch_plugin_config(repo: str, session: requests.Session) -> dict:
     resp = session.get(url, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
 
-    content_b64 = resp.json()["content"]
-    raw = base64.b64decode(content_b64)
+    data = resp.json()
+    encoding = data.get("encoding")
+    if encoding != "base64":
+        raise ValueError(
+            f"Unexpected encoding {encoding!r} for {repo}/{PLUGIN_CONFIG_PATH} "
+            f"(file may be too large for the Contents API)"
+        )
+    raw = base64.b64decode(data["content"])
     return json.loads(raw)
 
 
 def _documented_plugin_fields() -> frozenset[str]:
     """Return the set of allowed plugin-entry property names from the marketplace schema."""
-    schema = _load_schema(MARKETPLACE_SCHEMA_PATH)
+    schema = _load_schema(str(MARKETPLACE_SCHEMA_PATH))
     props = schema.get("$defs", {}).get("pluginEntry", {}).get("properties", {})
     return frozenset(props.keys())
 
 
 def _documented_author_fields() -> frozenset[str]:
     """Return the set of allowed author property names from the marketplace schema."""
-    schema = _load_schema(MARKETPLACE_SCHEMA_PATH)
+    schema = _load_schema(str(MARKETPLACE_SCHEMA_PATH))
     author = schema.get("$defs", {}).get("author", {}).get("properties", {})
     return frozenset(author.keys())
 
@@ -132,6 +161,12 @@ def _filter_author(author: object) -> dict | None:
     return filtered if filtered else None
 
 
+def _ordered_dict(d: dict) -> dict:
+    """Return *d* with keys in canonical order (stable across runs)."""
+    order = {k: i for i, k in enumerate(_KEY_ORDER)}
+    return dict(sorted(d.items(), key=lambda kv: (order.get(kv[0], len(_KEY_ORDER)), kv[0])))
+
+
 def merge_plugin(entry: dict, source: dict) -> dict:
     """Merge source fields into a marketplace plugin entry.
 
@@ -141,6 +176,9 @@ def merge_plugin(entry: dict, source: dict) -> dict:
       are preserved from the entry when absent from source.
     * All other documented fields are taken from *source* if present;
       fields absent from source are dropped.
+
+    The returned dict has a stable, canonical key order to prevent
+    spurious version bumps from nondeterministic iteration.
     """
     documented = _documented_plugin_fields()
     keep_from_entry = PROTECTED_FIELDS | MARKETPLACE_ONLY_FIELDS
@@ -165,7 +203,7 @@ def merge_plugin(entry: dict, source: dict) -> dict:
         else:
             del merged["author"]
 
-    return merged
+    return _ordered_dict(merged)
 
 
 def bump_version(version: str) -> str:
@@ -233,6 +271,7 @@ def cmd_refresh() -> None:
     plugins = marketplace.get("plugins", [])
     print(f"Found {len(plugins)} plugin(s) in marketplace")
 
+    had_errors = False
     for i, plugin in enumerate(plugins):
         name = plugin["name"]
         source = plugin.get("source", {})
@@ -265,6 +304,7 @@ def cmd_refresh() -> None:
 
             plugins[i] = merge_plugin(plugin, config)
         except Exception as e:
+            had_errors = True
             print(
                 f"  Error refreshing plugin {name} from {repo}: {e}",
                 file=sys.stderr,
@@ -291,6 +331,13 @@ def cmd_refresh() -> None:
         sys.exit(1)
 
     MARKETPLACE_PATH.write_text(_serialize(marketplace))
+
+    if had_errors:
+        print(
+            "Warning: some plugins failed to refresh (see errors above)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 # ── Entry point ──────────────────────────────────────────────────────────
