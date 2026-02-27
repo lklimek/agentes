@@ -17,7 +17,7 @@ developers and productive dev workflows.
 
 ```bash
 # Add marketplace
-/plugin marketplace add lklimek/agentes
+/plugin marketplace add lklimek/agents
 
 # Browse available plugins
 /plugin
@@ -38,7 +38,7 @@ to `.claude/settings.json`:
     "agentes": {
       "source": {
         "source": "github",
-        "repo": "lklimek/agentes"
+        "repo": "lklimek/agents"
       }
     }
   }
@@ -57,7 +57,7 @@ refreshes the catalog; individual plugins update independently.
 ## Architecture
 
 ```
-lklimek/agentes          ← this repo (marketplace catalog)
+lklimek/agents          ← this repo (marketplace catalog)
   ├── claudash           → lklimek/claudash (Dash Platform skills)
   └── claudius           → lklimek/claudius (dev lifecycle toolkit)
 ```
