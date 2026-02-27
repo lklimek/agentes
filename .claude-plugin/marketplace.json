@@ -7,7 +7,7 @@
   },
   "metadata": {
     "description": "Agentes in Rebus — AI agent plugins for blockchain developers. Skills, agents, and tools for the Dash Platform ecosystem and beyond.",
-    "version": "0.0.2"
+    "version": "1.0.2"
   },
   "plugins": [
     {
