@@ -1,7 +1,4 @@
-# Agentes
-
-> *Agentes in Rebus* — secret agents of the late Roman Empire, dispatched across
-> provinces to gather intelligence and execute imperial orders.
+# Agents
 
 A Claude Code plugin marketplace shipping AI agent plugins for blockchain
 developers and productive dev workflows.
@@ -17,14 +14,14 @@ developers and productive dev workflows.
 
 ```bash
 # Add marketplace
-/plugin marketplace add lklimek/agentes
+/plugin marketplace add lklimek/agents
 
 # Browse available plugins
 /plugin
 
 # Install individual plugins
-/plugin install claudash@agentes
-/plugin install claudius@agentes
+/plugin install claudash@lklimek
+/plugin install claudius@lklimek
 ```
 
 ## For project teams
@@ -35,10 +32,10 @@ to `.claude/settings.json`:
 ```json
 {
   "extraKnownMarketplaces": {
-    "agentes": {
+    "lklimek": {
       "source": {
         "source": "github",
-        "repo": "lklimek/agentes"
+        "repo": "lklimek/agents"
       }
     }
   }
@@ -57,7 +54,7 @@ refreshes the catalog; individual plugins update independently.
 ## Architecture
 
 ```
-lklimek/agentes          ← this repo (marketplace catalog)
+lklimek/agents          ← this repo (marketplace catalog)
   ├── claudash           → lklimek/claudash (Dash Platform skills)
   └── claudius           → lklimek/claudius (dev lifecycle toolkit)
 ```

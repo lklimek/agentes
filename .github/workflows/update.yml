@@ -33,8 +33,8 @@ jobs:
 
       - name: Commit and push
         run: |
-          git config user.name "agentes[bot]"
-          git config user.email "agentes[bot]@users.noreply.github.com"
+          git config user.name "agents[bot]"
+          git config user.email "agents[bot]@users.noreply.github.com"
           git add .claude-plugin/marketplace.json
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "refresh plugins" \
