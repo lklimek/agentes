@@ -77,6 +77,7 @@
           "description": "Relative path within the marketplace repo (must start with ./)"
         },
         { "$ref": "#/$defs/githubSource" },
+        { "$ref": "#/$defs/gitSubdirSource" },
         { "$ref": "#/$defs/urlSource" },
         { "$ref": "#/$defs/npmSource" },
         { "$ref": "#/$defs/pipSource" }
@@ -91,6 +92,31 @@
         "repo": {
           "type": "string",
           "description": "GitHub repository in owner/repo format"
+        },
+        "ref": {
+          "type": "string",
+          "description": "Git branch or tag"
+        },
+        "sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$",
+          "description": "Full 40-character git commit SHA"
+        }
+      }
+    },
+    "gitSubdirSource": {
+      "type": "object",
+      "required": ["source", "url", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "const": "git-subdir" },
+        "url": {
+          "type": "string",
+          "description": "Git repo URL, GitHub owner/repo shorthand, or SSH URL"
+        },
+        "path": {
+          "type": "string",
+          "description": "Subdirectory path within repo containing the plugin"
         },
         "ref": {
           "type": "string",

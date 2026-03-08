@@ -58,8 +58,9 @@
     {
       "name": "memcan",
       "source": {
-        "source": "github",
-        "repo": "lklimek/memcan"
+        "source": "git-subdir",
+        "url": "lklimek/memcan",
+        "path": "claude-plugin"
       },
       "version": "0.28.1",
       "description": "Persistent memory for Claude Code — save and recall learnings, decisions, preferences across sessions.",

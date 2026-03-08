@@ -20,6 +20,7 @@ Requires:
 import base64
 import copy
 import json
+import re
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -126,16 +127,24 @@ def validate_plugin_config(config: dict) -> list[str]:
 
 
 def _format_error(error: jsonschema.ValidationError) -> str:
-    path = ".".join(str(p) for p in error.absolute_path) if error.absolute_path else "(root)"
+    path = (
+        ".".join(str(p) for p in error.absolute_path)
+        if error.absolute_path
+        else "(root)"
+    )
     return f"{path}: {error.message}"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
-def fetch_plugin_config(repo: str, session: requests.Session) -> dict:
-    """Fetch and decode .claude-plugin/plugin.json from a GitHub repo."""
-    url = f"{GITHUB_API}/repos/{repo}/contents/{PLUGIN_CONFIG_PATH}"
+def fetch_plugin_config(
+    repo: str,
+    session: requests.Session,
+    config_path: str = PLUGIN_CONFIG_PATH,
+) -> dict:
+    """Fetch and decode a plugin.json from a GitHub repo."""
+    url = f"{GITHUB_API}/repos/{repo}/contents/{config_path}"
     resp = session.get(url, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
 
@@ -143,11 +152,29 @@ def fetch_plugin_config(repo: str, session: requests.Session) -> dict:
     encoding = data.get("encoding")
     if encoding != "base64":
         raise ValueError(
-            f"Unexpected encoding {encoding!r} for {repo}/{PLUGIN_CONFIG_PATH} "
+            f"Unexpected encoding {encoding!r} for {repo}/{config_path} "
             f"(file may be too large for the Contents API)"
         )
     raw = base64.b64decode(data["content"])
     return json.loads(raw)
+
+
+_GITHUB_HTTPS_RE = re.compile(r"^https://github\.com/(.+?)(?:\.git)?$")
+_GITHUB_SSH_RE = re.compile(r"^git@github\.com:(.+?)(?:\.git)?$")
+_OWNER_REPO_RE = re.compile(r"^[^/:]+/[^/:]+$")
+
+
+def _extract_github_repo(url: str) -> str | None:
+    """Extract ``owner/repo`` from a git-subdir URL, or None if not GitHub."""
+    m = _GITHUB_HTTPS_RE.match(url)
+    if m:
+        return m.group(1)
+    m = _GITHUB_SSH_RE.match(url)
+    if m:
+        return m.group(1)
+    if _OWNER_REPO_RE.match(url):
+        return url
+    return None
 
 
 def _documented_plugin_fields() -> frozenset[str]:
@@ -176,7 +203,9 @@ def _filter_author(author: object) -> dict | None:
 def _ordered_dict(d: dict) -> dict:
     """Return *d* with keys in canonical order (stable across runs)."""
     order = {k: i for i, k in enumerate(_KEY_ORDER)}
-    return dict(sorted(d.items(), key=lambda kv: (order.get(kv[0], len(_KEY_ORDER)), kv[0])))
+    return dict(
+        sorted(d.items(), key=lambda kv: (order.get(kv[0], len(_KEY_ORDER)), kv[0]))
+    )
 
 
 def merge_plugin(entry: dict, source: dict) -> dict:
@@ -288,31 +317,42 @@ def cmd_refresh() -> None:
         name = plugin["name"]
         source = plugin.get("source", {})
 
-        # Only GitHub sources can be refreshed; skip all others.
+        # Only GitHub-resolvable sources can be refreshed; skip all others.
         if isinstance(source, str):
             print(f"  Skipping {name}: relative-path source ({source})")
             continue
         source_type = source.get("source")
-        if source_type != "github":
+
+        if source_type == "github":
+            repo = source["repo"]
+            config_path = PLUGIN_CONFIG_PATH
+        elif source_type == "git-subdir":
+            repo = _extract_github_repo(source["url"])
+            if repo is None:
+                print(
+                    f"  Skipping {name}: git-subdir with non-GitHub URL "
+                    f"(not supported by refresh script)"
+                )
+                continue
+            subdir = source["path"]
+            config_path = f"{subdir}/.claude-plugin/plugin.json"
+        else:
             label = source_type or "unknown"
             print(f"  Skipping {name}: non-GitHub source ({label})")
             continue
 
-        repo = source["repo"]
         print(f"::group::{name} ({repo})")
         try:
-            config = fetch_plugin_config(repo, session)
+            config = fetch_plugin_config(repo, session, config_path=config_path)
             print(f"  Fetched config: {json.dumps(config, indent=2)}")
 
             # Validate the fetched plugin.json
             plugin_errors = validate_plugin_config(config)
             if plugin_errors:
-                print(f"  Plugin config validation errors:", file=sys.stderr)
+                print("  Plugin config validation errors:", file=sys.stderr)
                 for err in plugin_errors:
                     print(f"    - {err}", file=sys.stderr)
-                raise ValueError(
-                    f"plugin.json from {repo} failed schema validation"
-                )
+                raise ValueError(f"plugin.json from {repo} failed schema validation")
 
             plugins[i] = merge_plugin(plugin, config)
         except Exception as e:
