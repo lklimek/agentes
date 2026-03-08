@@ -7,7 +7,7 @@
   },
   "metadata": {
     "description": "AI agent plugins for blockchain developers. Skills, agents, and tools for the Dash Platform ecosystem and beyond.",
-    "version": "1.0.55"
+    "version": "1.0.56"
   },
   "plugins": [
     {
@@ -61,7 +61,7 @@
         "source": "github",
         "repo": "lklimek/memcan"
       },
-      "version": "0.28.3",
+      "version": "0.29.0",
       "description": "Persistent memory for Claude Code — save and recall learnings, decisions, preferences across sessions.",
       "author": {
         "name": "lklimek",
